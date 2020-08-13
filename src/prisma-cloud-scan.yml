@@ -1,0 +1,530 @@
+# This code is licensed from CircleCI to the user under the MIT license. See
+# https://circleci.com/orbs/registry/licensing for details.
+version: 2.1
+description: >
+  Apply consistent checks throughout the build-to-release process for keeping your applications and infrastructure secure. With Prisma Cloud IaC Scan, identify insecure configurations in common Infrastructure-as-Code (IaC) templates - AWS Cloud Formation Templates, HashiCorp Terraform templates, Kubernetes App Deployment YAML files, etc. With Prisma Cloud Compute TwistCLI Scan, identify vulnerabilities among your container images.
+display:
+  home_url: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security.html
+  source_url: https://github.com/PaloAltoNetworks/prisma-cloud-circleci-orb
+
+examples:
+  prisma-iac-scan:
+    description: |
+            Authenticate and Scan IaC templates from the user repo. You may use default executor for the execution.
+    usage:
+      version: 2.1
+
+      orbs:
+        prisma: prisma_cloud/devops_security@2.0.0
+
+      workflows:
+        scan:
+          jobs:
+            - prisma/iac_scan:
+                # Get Prisma Cloud API URL here: https://api.docs.prismacloud.io
+                prisma_cloud_api_url: <prisma cloud api url>    # Default env variable: PC_API_URL
+                access_key: PC_ACCESS_KEY   # Default env variable: PC_ACCESS_KEY
+                secret_key: PC_SECRET_KEY  # Default env variable: PC_SECRET_KEY
+                failure_criteria_high_severity: 1
+                failure_criteria_medium_severity: 2
+                failure_criteria_low_severity: 3
+                failure_criteria_operator: and
+                tags: env:development, team:devOps 
+            
+
+  prisma-compute-scan:
+    description: |
+            Scans the container image for any vulnerabilities. The 'docker_build_and_save' job lists the steps required before calling the 'image_scan' job from the orb.
+    usage:
+      version: 2.1
+
+      orbs:
+        prisma: prisma_cloud/devops_security@2.0.0
+
+      jobs:
+          docker_build_and_save:
+            executor: prisma/compute
+            steps:
+              - checkout
+              - run: 'docker pull nginx'
+              - run: mkdir -p workspace
+              - run: 'docker image'
+              - run: 'docker save nginx:latest -o workspace/image.tar'
+              - persist_to_workspace:
+                  root: workspace
+                  paths:
+                  - image.tar
+      workflows:
+        scan:
+          jobs:
+            - docker_build_and_save
+            - prisma/image_scan:
+                requires:
+                  - docker_build_and_save
+                prisma_cloud_compute_url: <prisma cloud compute console url>  # Default env variable: PC_COMPUTE_URL
+                prisma_cloud_compute_user: <prisma cloud compute username>  # Default env variable: PC_COMPUTE_USER
+                prisma_cloud_compute_pass: PC_COMPUTE_PASS # Default env variable: PC_COMPUTE_PASS
+                image: 'myrepo/myimage:tag'
+                image_tar: image.tar
+
+
+
+jobs:
+  iac_scan:
+    description: |
+            Simple scan job to first authenticate user and then perform IaC scan on the templates.
+    executor: default
+    parameters:
+      access_key:
+        description: Prisma Cloud Access Key
+        type: env_var_name
+        default: PC_ACCESS_KEY
+      secret_key:
+        description: Prisma Cloud Secret Key
+        type: env_var_name
+        default: PC_SECRET_KEY
+      prisma_cloud_api_url:
+        description: Prisma Cloud Server Url
+        type: string
+        default: $PC_CONSOLE_URL
+      terraform_variable_filenames:
+        description: Comma separated list of filenames containing Terraform variables.
+        type: string
+        default: ""
+      templates_directory_path:
+        description: Directory path where IaC templates are stored.
+        type: string
+        default: .
+      failure_criteria_high_severity:
+        description: Provide failure threshold for high severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_medium_severity:
+        description: Provide failure threshold for medium severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_low_severity:
+        description: Provide failure threshold for low severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_operator:
+        description: Provide operator for high, medium, low severity failure thresholds.
+        type: string
+        default: or
+      tags:
+        description: Provide the Tags for the repo.
+        type: string
+        default: ""
+    steps:
+      - checkout
+      - auth:
+          access_key: <<parameters.access_key>>
+          secret_key: <<parameters.secret_key>>
+          prisma_cloud_api_url: <<parameters.prisma_cloud_api_url>>        
+      - iac_scan:
+          terraform_variable_filenames: <<parameters.terraform_variable_filenames>>
+          templates_directory_path: <<parameters.templates_directory_path>>
+          failure_criteria_high_severity: <<parameters.failure_criteria_high_severity>>
+          failure_criteria_medium_severity: <<parameters.failure_criteria_medium_severity>>
+          failure_criteria_low_severity: <<parameters.failure_criteria_low_severity>>
+          failure_criteria_operator: <<parameters.failure_criteria_operator>>
+          tags: <<parameters.tags>>
+  
+  image_scan:
+    description: |
+            Simple scan job to scan the image using twistcli.
+    executor: compute
+    parameters:
+      prisma_cloud_compute_user:
+        description: The Prisma Cloud Compute user with the CI User role
+        type: string
+        default: $PC_COMPUTE_USER
+      prisma_cloud_compute_pass:
+        description: The Prisma Cloud Compute user's password
+        type: env_var_name
+        default: PC_COMPUTE_PASS
+      prisma_cloud_compute_url:
+        description: The base URL for the console -- http://console.<my_company>.com:8083 -- without a trailing /
+        type: string
+        default: $PC_CONSOLE_URL
+      workspace_name:
+        description: Name of workspace to Docker save the image-tar into so it can be scanned by orb
+        type: string
+        default: workspace 
+      image_tar:
+        description: The name of the image tar file stored in the workspace -- defaults to image.tar
+        type: string
+        default: image.tar
+      image:
+        description: The name of the image to scan -- myimage or myorg/myimage or myorg/myimage:latest
+        type: string
+    steps:
+      - install:
+          prisma_cloud_compute_user: <<parameters.prisma_cloud_compute_user>>
+          prisma_cloud_compute_url: <<parameters.prisma_cloud_compute_url>>
+          prisma_cloud_compute_pass: <<parameters.prisma_cloud_compute_pass>>
+      - load:
+          pc_workspace_name: <<parameters.workspace_name>>
+          pc_image_tar: <<parameters.image_tar>>
+      - scan:
+          prisma_cloud_compute_user: <<parameters.prisma_cloud_compute_user>>
+          prisma_cloud_compute_pass: <<parameters.prisma_cloud_compute_pass>>
+          prisma_cloud_compute_url: <<parameters.prisma_cloud_compute_url>>
+          pc_image: <<parameters.image>>
+            
+commands:
+  auth:
+    description: API call for authentication. User input will be host, username & password. Response will be the auth token to be passed on in scan command.
+    parameters:
+      access_key:
+        description: Prisma Cloud Access Key
+        type: env_var_name
+        default: PC_ACCESS_KEY
+      secret_key:
+        description: Prisma Cloud Secret Key
+        type: env_var_name
+        default: PC_SECRET_KEY
+      prisma_cloud_api_url:
+        description: Prisma Cloud Server Url
+        type: string
+        default: $PC_CONSOLE_URL
+    steps:
+      - run: 
+          command: |
+            if [[ -z "$ASSET_NAME" ]]
+            then
+              echo "Please specify the asset name value as environment variable in your project. Environment variable name: ASSET_NAME"
+              exit 1;
+            fi
+            ACCESS_KEY=$<<parameters.access_key>>
+            SECRET_KEY="$<<parameters.secret_key>>"
+            HOST_URL=<<parameters.prisma_cloud_api_url>>
+
+            if [[ -z "$HOST_URL" ]]
+            then
+              echo "Please enter a valid URL. For details, refer to: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html"
+              exit 1;
+            fi
+            if [[ -z "$ACCESS_KEY" || -z "$SECRET_KEY" ]]
+            then
+              echo "Invalid credentials, verify that access key and secret key in Prisma Cloud Orb parameters are valid. For details refer to: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html"
+              exit 1;
+            fi
+
+            result=$(curl -k -i -o -X POST <<parameters.prisma_cloud_api_url>>/login --user-agent "CircleCI/2.0.0" -H 'Content-Type:application/json' -d '{"username":"'"${ACCESS_KEY}"'", "password":"'"${SECRET_KEY}"'"}')
+             
+            code=$(echo "$result" |grep HTTP | awk '{print $2}')
+
+            if [[ "$code" -eq 400 || "$code" -eq 401 ]] 
+            then
+              echo "Invalid credentials, verify that access key and secret key in Prisma Cloud Orb parameters are valid. For details refer to: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html"
+              exit 1;
+            elif [[ "$code" -eq 500 || "$code" -eq 501 || "$code" -eq 503 ]]
+            then
+              echo "Oops! Something went wrong, please try again or refer to documentation here: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html"
+              exit 1;
+            elif [[ "$code" -ne 200 ]]
+            then
+              echo "Oops! Something went wrong, please try again or refer to documentation here: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html"
+              exit 1;
+            fi
+
+            response=$(echo "$result" |grep "token")
+           
+            messages="$(echo "$response" | jq .message)"
+            token="$(echo "$response" | jq .token|tr -d '"')"
+            echo "export AUTH_TOKEN=${token}" >> $BASH_ENV
+            echo "export PC_HOST=<<parameters.prisma_cloud_api_url>>" >> $BASH_ENV
+  iac_scan:
+    description: Scan the repo for vulnerabilities in the templates against default and custom rules
+    parameters:
+      terraform_variable_filenames:
+        description: Comma separated list of filenames containing Terraform variables.
+        type: string
+        default: ""
+      templates_directory_path:
+        description: Directory path where IaC templates are stored.
+        type: string
+        default: .
+      failure_criteria_high_severity:
+        description: Provide failure threshold for high severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_medium_severity:
+        description: Provide failure threshold for medium severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_low_severity:
+        description: Provide failure threshold for low severity security issues.
+        type: integer
+        default: 0
+      failure_criteria_operator:
+        description: Provide operator for high, medium, low serverity failure thresholds.
+        type: string
+        default: or
+      tags:
+        description: Provide the Tags for the repo.
+        type: string
+        default: ""
+    steps:
+      - run:
+          command: |
+            #################################################################
+            # SCAN RESULTS
+            #################################################################
+            source $BASH_ENV
+            ##################################################################
+            # Generate the terraform parameters header
+            ##################################################################
+
+            wget https://github.com/mikefarah/yq/releases/download/3.2.1/yq_linux_386
+            sudo mv yq_linux_386 /usr/local/bin/yq
+            sudo chmod +x /usr/local/bin/yq
+
+            if [[ ! -f .prismaCloud/config.yml ]]
+            then
+              echo "Can not find config.yml under .prismaCloud folder in repo ${CIRCLE_PROJECT_REPONAME}. Please make sure the file is present in correct format (refer: https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-cloud-devops-security/use-the-prisma-cloud-plugin-for-circleci.html)  at the root of your repo under .prismaCloud folder."
+              exit 1;
+            fi
+            headers=""
+            url=""
+            fileContents=$(yq read -j .prismaCloud/config.yml)
+            #echo "file contents are: " $fileContents
+            templateType="$(echo "$fileContents" | jq -r '.template_type')"
+            #echo "template type: " $templateType
+
+            if [[ ! -z "$templateType" && ( "$templateType" == "TF" || "$templateType" == "tf" ) ]]
+            then
+              url="$PC_HOST/iac/tf/v1/scan"
+              terraformVersion="$(echo "$fileContents" | jq -r '.terraform_version')"
+              if [[ ! -z "$terraformVersion" && ( "$terraformVersion" == 0.12 || "$terraformVersion" > 0.12 ) ]]
+              then
+                headers+=" -H terraform-version:0.12"
+                isTerraform12ParamsPresent="$(echo "$fileContents" | jq -r '.terraform_012_parameters')"
+                if [[ "$isTerraform12ParamsPresent" != null ]]
+                then
+                  terraformContents="$(echo "$fileContents" | jq -r '.terraform_012_parameters[] |= with_entries( .key |= gsub("root_module"; "root-module") )' | jq -r '.terraform_012_parameters[] |= with_entries( .key |= gsub("variable_files"; "variable-files") )' )"
+                  terraform012Parameters="$(echo "$terraformContents" | jq -r '.terraform_012_parameters' | tr -d '\n\t' | tr -d '[:blank:]')"
+                  if [[  "$terraform012Parameters" != null ]]
+                  then
+                    headers+=" -H terraform-012-parameters:$terraform012Parameters"
+                  fi
+                fi 
+              else
+                headers+=" -H terraform-version:0.11"
+                #read terraform 0.11 parameters
+                variableFiles="$(echo "$fileContents" | jq -r '.terraform_011_parameters.variable_files' | tr -d '\n\t' | tr -d '[:blank:]')"
+                variableValues="$(echo "$fileContents" | jq -r '.terraform_011_parameters.variable_values' | tr -d '\n\t' | tr -d '[:blank:]')"
+                if [[ "$variableFiles" != null ]]
+                then
+                  headers+=" -H rl-variable-file-names:$variableFiles"
+                fi
+                if [[ "$variableValues" != null ]]
+                then
+                  headers+=" -H rl-parameters:$variableValues"
+                fi
+              fi
+            elif [[ ! -z "$templateType" && ( "$templateType" == "CFT" || "$templateType" == "cft" ) ]]
+            then
+              url="$PC_HOST/iac/cft/v1/scan"
+              variableValues="$(echo "$fileContents" | jq -r '.cft_parameters.variable_values' | tr -d '\n\t' | tr -d '[:blank:]')"
+              if [[ "$variableValues" != null ]]
+              then
+               headers+=" -H rl-parameters:$variableValues"
+              fi
+            elif [[ ! -z "$templateType" && ( "$templateType" == "K8S" || "$templateType" == "k8s" || "$templateType" == "K8s" ) ]]
+            then
+              url="$PC_HOST/iac/k8s/v1/scan"
+            else
+              echo "No valid template-type found in config.yml file in repo ${CIRCLE_PROJECT_REPONAME}. Please specify either of these values: TF, CFT or K8s as template-type variable in the config.yml"
+              exit 1;
+            fi
+ 
+            #echo url: "$url"
+            #echo header: "$headers"
+            ##################################################################
+
+            SCAN_PATH=<<parameters.templates_directory_path>>
+            searchstring="/"
+            rest=${SCAN_PATH#*$searchstring}
+            indexValue=$(( ${#SCAN_PATH} - ${#rest} - ${#searchstring} ))
+            if [[ "$indexValue" == 0 ]] 
+            then
+              #echo " I am here"
+              SCAN_PATH="$rest"
+            fi
+            #echo "After scan path: $SCAN_PATH"
+            zip -r repo.zip $SCAN_PATH -x '*.git*'
+            
+            file_size="$(wc -c repo.zip | awk '{print $1}')"
+            #echo "$file_size"
+            file_size_limit=1000000
+            if [[ "$file_size" -gt "$file_size_limit" ]]
+            then
+              printf "\nDirectory size ${CIRCLE_PROJECT_REPONAME} more than 2 MB is not supported."
+              exit 1;
+            fi
+
+            settings_tags="${TAGS}"
+            repo_tags="$(echo "$fileContents" | jq -r '.tags' |tr -d '\n\t' | tr -d '[:blank:]')"
+            task_tags="<<parameters.tags>>"
+            prisma_tags=""
+            if [[ ! -z "$settings_tags" ]] 
+            then
+              temp="\"$(sed 's/,/","/g' \<<< "$settings_tags")\""
+              prisma_tags="\"settings_tags\":[$temp]"
+            fi
+            if [[ ! -z "$repo_tags" ]]
+            then
+              if [[ "$prisma_tags" == "" ]]
+              then
+                prisma_tags+="\"repo_tags\":$repo_tags"
+              else
+                prisma_tags+=", \"repo_tags\":$repo_tags"
+              fi
+            fi
+            if [[ ! -z "$task_tags" ]] 
+            then
+              temp="\"$(sed 's/,/","/g' \<<< "$task_tags")\""
+              if [[ "$prisma_tags" == "" ]]
+              then
+                 prisma_tags+="\"task_tags\":[$temp]"
+              else
+                prisma_tags+=", \"task_tags\":[$temp]"
+              fi
+            fi
+            ##################################################################
+            # creating metadata structure
+            metadata_json={"asset-name":"$ASSET_NAME","asset-type":"CircleCI","user-id":"${CIRCLE_PROJECT_USERNAME}","prisma_tags":{"$prisma_tags"},"scan-attributes":{"build-number":"${CIRCLE_BUILD_NUM}","project-name":"${CIRCLE_PROJECT_REPONAME}"},"failure-criteria":{"high":"<<parameters.failure_criteria_high_severity>>","medium":"<<parameters.failure_criteria_medium_severity>>","low":"<<parameters.failure_criteria_low_severity>>","operator":"<<parameters.failure_criteria_operator>>"}}
+            #echo metadata "$metadata_json"
+            ##################################################################
+            
+            response=$(curl -X POST "$url" -H "x-redlock-auth:${AUTH_TOKEN}" --user-agent "CircleCI/2.0.0" $headers -H "x-redlock-iac-metadata:${metadata_json}" -F templateFile=@repo.zip)
+            if [ ! -z "$PC_PLUGIN_DEBUG" && "$PC_PLUGIN_DEBUG" == true ] ; then
+              echo "DEBUG: response: $response"
+            fi
+            result="$(echo "$response" | jq -r '.result.is_successful')"
+            RESULTS_DIRECTORY=$(mktemp -d scanResults.XXXXXXXX)
+            if [[ "$result" == "true" ]]
+            then
+              partial_failure="$(echo "$response" | jq -r '.result.partial_failure')"
+              #echo "partial_failure: $partial_failure"
+              matched="$(echo "$response" | jq -r '.result.rules_matched')"
+              #echo "matched: $matched"
+              if [[ "$matched" != null ]]
+              then
+                stats="$(echo "$response" | jq -r '.result.severity_stats')"
+                echo $matched | jq '["Severity","Name","Description","Files"], (map({severity, name, description, files} ) | .[] | [.severity, .name, .description, (.files|join(";"))]) | @csv' | tr -d '\\"'> $RESULTS_DIRECTORY/scan_results.csv
+                awk -F'\t' -v OFS='\t' '
+                  NR == 1 {print "Index", $0; next}
+                  {print (NR-1), $0}
+                ' $RESULTS_DIRECTORY/scan_results.csv > $RESULTS_DIRECTORY/scan.csv
+
+                echo $matched |  jq '["Severity","Name","Files"], (map({severity, name, files} ) | .[] | [.severity, .name, (.files|join(";"))]) | @csv'| column -t -s "," | tr -d '\\"' > $RESULTS_DIRECTORY/formatted.csv
+                awk -F'\t' -v OFS='\t' '
+                  NR == 1 {print "\nIndex", $0; print "------------------------------------------------------------------------------------------------------------------------------------------------------" ;  next}
+                  {print (NR-1), $0}
+                ' $RESULTS_DIRECTORY/formatted.csv > $RESULTS_DIRECTORY/console_output.csv
+
+
+                #################################################################
+                # SCAN RESULTS
+                #################################################################
+
+                cat $RESULTS_DIRECTORY/console_output.csv
+
+                high="$(echo "$stats" | jq -r '.high')"
+                medium="$(echo "$stats" | jq -r '.medium')"
+                low="$(echo "$stats" | jq -r '.low')"
+       
+                if [[ ( ( <<parameters.failure_criteria_operator>> == "or" ) && ( "$high" -ge <<parameters.failure_criteria_high_severity>> ) || ( "$medium" -ge <<parameters.failure_criteria_medium_severity>> ) || ( "$low" -ge <<parameters.failure_criteria_low_severity>> ) ) || ( (<<parameters.failure_criteria_operator>> == "and") && ( "$high" -ge <<parameters.failure_criteria_high_severity>> ) && ( "$medium" -ge <<parameters.failure_criteria_medium_severity>> ) && ( "$low" -ge <<parameters.failure_criteria_low_severity>> ) ) ]]
+                then
+                  printf "\nPrisma Cloud IaC scan has failed as security issues count (high: \"${high}\", medium: \"${medium}\", low: \"${low}\") meets or exceeds the failure criteria (high:<<parameters.failure_criteria_high_severity>>, medium:<<parameters.failure_criteria_medium_severity>>, low:<<parameters.failure_criteria_low_severity>>, operator:<<parameters.failure_criteria_operator>>). For more details on the issues, please refer to: https://iacscanapidoc.redlock.io/content"
+                  if [[ ! -z "$partial_failure" ]]
+                  then
+                    printf "\n$partial_failure"
+                  fi  
+                  exit 1;
+                else
+                  printf "\nPrisma Cloud IaC Scan has been successful as security issues count (high: \"${high}\", medium: \"${medium}\", low: \"${low}\") does not exceed the failure criteria (high:<<parameters.failure_criteria_high_severity>>, medium:<<parameters.failure_criteria_medium_severity>>, low:<<parameters.failure_criteria_low_severity>>, operator:<<parameters.failure_criteria_operator>>). For more details on the issues, please refer to: https://iacscanapidoc.redlock.io/content"
+                  if [[ ! -z "$partial_failure" ]]
+                  then
+                    printf "\n$partial_failure"
+                  fi  
+                  exit 0;
+                fi
+              else  
+                printf "\nGood job! Prisma Cloud did not detect any issues."
+                exit 0;
+              fi
+              if [[ ! -z "$partial_failure" ]]
+              then
+                printf "\n$partial_failure"
+              fi  
+            else
+              error_message="$(echo "$response" | jq -r '.result.error_details')"
+              printf "\n$error_message"
+              exit 1;
+            fi
+      - store_artifacts:
+          path: scanResults/scan.csv
+  install:
+    description: Download the twistcli static binary from the Console
+    parameters:
+      prisma_cloud_compute_user:
+        description: The Prisma Cloud Compute user with the CI User role
+        type: string
+      prisma_cloud_compute_pass:
+        description: The Prisma Cloud Compute user's url
+        type: env_var_name
+      prisma_cloud_compute_url:
+        description: The base URL for the console -- http://console.<my_company>.com:8083 -- without a trailing /
+        type: string
+    steps:
+      - run: curl -k -u <<parameters.prisma_cloud_compute_user>>:${<<parameters.prisma_cloud_compute_pass>>} --output ./twistcli <<parameters.prisma_cloud_compute_url>>/api/v1/util/twistcli
+      - run: sudo chmod a+x ./twistcli 
+
+  load:
+    description: Load the image into the Executor machine from the tar file stashed in the Workspace
+    parameters:
+      pc_image_tar:
+        description: The name of the image tar file stored in the workspace
+        type: string
+      pc_workspace_name:
+        description: Name of workspace to Docker save the image into so it can be scanned by orb
+        type: string
+    steps:
+      - attach_workspace:
+          at: <<parameters.pc_workspace_name>>
+      - run: docker load -i <<parameters.pc_workspace_name>>/<<parameters.pc_image_tar>>
+
+  scan:
+    description: Scan the container image with twistcli
+    parameters:
+      prisma_cloud_compute_user:
+        description: The Prisma Cloud Compute user with the CI User role
+        type: string
+      prisma_cloud_compute_pass:
+        description: The Prisma Cloud Compute user's password
+        type: env_var_name
+      prisma_cloud_compute_url:
+        description: The base URL for the console -- http://console.<my_company>.com:8083 -- without a trailing /
+        type: string
+      pc_image:
+        description: The name of the image to scan -- myimage or myorg/myimage or myorg/myimage:latest
+        type: string
+    steps:
+      - run: >
+          ./twistcli images scan --ci --details --address <<parameters.prisma_cloud_compute_url>> -u <<parameters.prisma_cloud_compute_user>> -p ${<<parameters.prisma_cloud_compute_pass>>}
+          <<parameters.pc_image>>
+
+executors:
+  default:
+    description: |
+            This executor is defined to be used for Prisma Cloud IaC Scan.
+    machine: true
+  compute:
+    description: |
+            Defines the working directory for Prisma Compute Scans.
+    machine: true
+    working_directory: /tmp/twistlock-scan
