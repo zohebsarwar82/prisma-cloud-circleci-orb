@@ -44,7 +44,7 @@ workflows:
           #
           # Prisma Cloud API
           #
-          prisma_cloud_api_url: https://api.prismacloud.io
+          prisma_cloud_api_url: https://api2.prismacloud.io
           #
           # Access Key, from the value of the predefined $prisma_cloud_access_key CircleCI environment variable.
           #   This is documented as a 'string':
@@ -62,7 +62,7 @@ workflows:
           #
           # Asset name, from the value of the predefined $CIRCLE_PROJECT_REPONAME CircleCI environment variable.
           #
-          prisma_cloud_asset_name: $CIRCLE_PROJECT_REPONAME
+          prisma_cloud_asset_name: "zs-asset"
           #
           # Gate based on the scan results.
           #
