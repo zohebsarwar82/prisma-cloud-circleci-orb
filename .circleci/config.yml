@@ -53,12 +53,12 @@ workflows:
           #   But, specifying an access key in a public (or even a private) repository is problematic.
           #   Thankfully, CircleCI allows us to specify it as CircleCI environment variable.
           #
-          prisma_cloud_access_key: $prisma_cloud_access_key
+          prisma_cloud_access_key: prisma_cloud_access_key
           #
           # Name of the CircleCI environment variable containing the prisma_cloud_secret_key value.
           #   This is documented as an 'environment variable' and 'env_var_name' in the above documentation.
           #
-          prisma_cloud_secret_key: $prisma_cloud_secret_key
+          prisma_cloud_secret_key: prisma_cloud_secret_key
           #
           # Asset name, from the value of the predefined $CIRCLE_PROJECT_REPONAME CircleCI environment variable.
           #
