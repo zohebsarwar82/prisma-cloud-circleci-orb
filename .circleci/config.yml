@@ -23,7 +23,7 @@ jobs:
           #   But, specifying a username in a public (or even a private) repository is problematic.
           #   Thankfully, CircleCI allows us to specify it as CircleCI environment variable.
           #
-          prisma_cloud_compute_username: prisma_cloud_compute_username
+          prisma_cloud_compute_username: "132236a3-28ca-4892-b066-1c4981870025"
           #
           # The name of the CircleCI environment variable containing the prisma_cloud_compute_password value.
           #   This is documented as an 'environment variable' and 'env_var_name' in the above documentation.
@@ -53,7 +53,7 @@ workflows:
           #   But, specifying an access key in a public (or even a private) repository is problematic.
           #   Thankfully, CircleCI allows us to specify it as CircleCI environment variable.
           #
-          prisma_cloud_access_key: prisma_cloud_access_key
+          prisma_cloud_access_key: "132236a3-28ca-4892-b066-1c4981870025"
           #
           # Name of the CircleCI environment variable containing the prisma_cloud_secret_key value.
           #   This is documented as an 'environment variable' and 'env_var_name' in the above documentation.
