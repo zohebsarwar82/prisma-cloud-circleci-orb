@@ -12,7 +12,7 @@ jobs:
       - devops_security/scan_image:
           # Prisma Cloud Compute API.
           #
-          prisma_cloud_compute_url: https://us-east1.cloud.twistlock.com/us-1-111573457
+          prisma_cloud_compute_url: https://us-east1.cloud.twistlock.com/us-2-158254030
           #
           # (Use an Access Key and Secret Key instead of a Username and Password when using SSO in Prisma Cloud.)
           #
