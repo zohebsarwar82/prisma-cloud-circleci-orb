@@ -23,12 +23,12 @@ jobs:
           #   But, specifying a username in a public (or even a private) repository is problematic.
           #   Thankfully, CircleCI allows us to specify it as CircleCI environment variable.
           #
-          prisma_cloud_compute_username: $prisma_cloud_compute_username
+          prisma_cloud_compute_username: prisma_cloud_compute_username
           #
           # The name of the CircleCI environment variable containing the prisma_cloud_compute_password value.
           #   This is documented as an 'environment variable' and 'env_var_name' in the above documentation.
           #
-          prisma_cloud_compute_password: $prisma_cloud_compute_password
+          prisma_cloud_compute_password: prisma_cloud_compute_password
           #
           # The name of the image to scan.
           #
