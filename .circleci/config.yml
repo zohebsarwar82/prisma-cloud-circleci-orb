@@ -66,7 +66,7 @@ workflows:
           #
           # Gate based on the scan results.
           #
-          prisma_cloud_failure_criteria: 'High:9,Medium:9,Low:9,Operator:OR'
+          prisma_cloud_failure_criteria: 'High:1,Medium:1,Low:1,Operator:OR'
           #
           # CircleCI does not read root_module(s) from .prismaCloud/config.yml and scans this prisma_cloud_repo_dir.
           #
