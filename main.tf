@@ -11,6 +11,9 @@ resource "aws_s3_bucket" "foo" {
   acl           = "public-read-write"
   force_destroy = true
   versioning {
-     enabled = false
+    enabled = false
+  }
+  tags = {
+    yor_trace = "b9d892df-9dbc-4974-b716-786aca13da29"
   }
 }
